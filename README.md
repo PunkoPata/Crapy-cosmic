@@ -1,4 +1,4 @@
-This is an third party utility for Eve Online Game.
+This is an third party utility for the game Eve Online.
 
 It allows to quickly check witch cosmics signatures are new or gone of the system.
 So you can scan the new ones.
