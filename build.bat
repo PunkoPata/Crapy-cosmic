@@ -77,7 +77,7 @@ echo.
 echo COMPRIMIENDO EN DIRECTORIO PADRE...
 
 powershell -Command ^
-"Compress-Archive -Path '%OUTDIR%\release\*' -DestinationPath '%OUTDIR%\crapy-cosmic-release-v%VERSION%.zip' -CompressionLevel Optimal -Force"
+"Compress-Archive -Path '%OUTDIR%\release\*' -DestinationPath '%OUTDIR%\crapy-cosmic-win-v%VERSION%.zip' -CompressionLevel Optimal -Force"
 
 echo.
 echo ===============================
