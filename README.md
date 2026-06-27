@@ -1,8 +1,10 @@
 This is an third party utility for the game Eve Online.
 
-It allows to quickly check witch cosmics signatures are new or gone of the system.
+It allows to quickly check which cosmics signatures are new or gone of the system.
 So you can scan the new ones.
 Specially Usefull for Wormhole People.
+
+For the moment the current language is spanish.
 
 == How to use it ==
 
