@@ -1,176 +1,447 @@
 import os
+import glob
 import re
 import sys
 import time
 import traceback
-from tkinter import Tk
+import pyperclip
 
-# Archivo de historial en tu carpeta de usuario
-ARCHIVO_TXT = os.path.join(os.path.expanduser("~"), "firmas_anteriores.txt")
+# System paths
+LOGS_FOLDER = os.path.join(os.path.expanduser("~"), "Documents", "EVE", "logs", "Gamelogs")
+HISTORY_FOLDER = os.path.join(os.path.expanduser("~"), "firmas_eve_multisistema")
 
-# Frecuencia de revisión en segundos
-INTERVALO_REVISION = 1.0
+os.makedirs(HISTORY_FOLDER, exist_ok=True)
 
-# Códigos de color ANSI para la consola
+CHECK_INTERVAL = 1.0
+
+# ANSI Colors
 RESET = "\033[0m"
-VERDE = "\033[92m"
-ROJO = "\033[91m"
-CIAN = "\033[96m"
-AMARILLO = "\033[93m"
-GRIS = "\033[90m"
+GREEN = "\033[92m"
+RED = "\033[91m"
+CYAN = "\033[96m"
+YELLOW = "\033[93m"
+GRAY = "\033[90m"
+WHITE = "\033[97m"
+MAGENTA = "\033[95m"
+
+EVE_TERMS = ["Cosmic Signature", "Firma cósmica", "Cosmic Anomaly", "Anomalía cósmica"]
 
 
-def obtener_texto_portapapeles():
-    """Lee el portapapeles usando Tkinter de forma limpia."""
+class EVEMonitor:
+    def __init__(self):
+        self.current_system = "Unknown"
+        self.current_log_file = None
+        self.current_character = "Unknown"
+        self.last_lines_counted = 0
+        self.last_clipboard_text = ""
+        
+    def get_txt_file_path(self):
+        safe_name = "".join(c for c in self.current_system if c.isalnum() or c in ("-", "_")).strip()
+        return os.path.join(HISTORY_FOLDER, f"firmas_{safe_name}.txt")
+
+    def find_all_gamelogs_sorted(self):
+        pattern = os.path.join(LOGS_FOLDER, "*.txt")
+        files = glob.glob(pattern)
+        if not files:
+            return []
+        
+        gamelog_pattern = re.compile(r"^\d{8}_\d{6}_\d+\.txt$")
+        valid_gamelogs = [
+            f for f in files 
+            if gamelog_pattern.match(os.path.basename(f))
+        ]
+        
+        if not valid_gamelogs:
+            return []
+            
+        return sorted(valid_gamelogs, key=os.path.getmtime, reverse=True)
+
+    def extract_listener_and_system(self, log_path):
+        listener = None
+        system = None
+        
+        try:
+            with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
+                lines = f.readlines()
+            
+            for line in lines[:10]:
+                match_listener = re.search(r"Listener:\s+(.+)", line)
+                if match_listener:
+                    listener = match_listener.group(1).strip()
+                    break
+            
+            for line in reversed(lines):
+                match_jump = re.search(r"Jumping from ([A-Za-z0-9\- ]+) to ([A-Za-z0-9\- ]+)", line)
+                if match_jump:
+                    system = match_jump.group(2).strip()
+                    break
+                
+                match_undock = re.search(r"Undocking from .+? to ([A-Za-z0-9\- ]+) solar system", line)
+                if match_undock:
+                    system = match_undock.group(1).strip()
+                    break
+                    
+        except Exception:
+            pass
+            
+        return listener, system
+
+    def trace_historical_location(self, target_character):
+        all_logs = self.find_all_gamelogs_sorted()
+        
+        if len(all_logs) <= 1:
+            return None
+            
+        for log_path in all_logs[1:]:
+            listener, system = self.extract_listener_and_system(log_path)
+            if listener == target_character and system:
+                return system
+        return None
+
+    def track_system_change(self):
+        all_logs = self.find_all_gamelogs_sorted()
+        if not all_logs:
+            return
+            
+        recent_log = all_logs[0]
+
+        if recent_log != self.current_log_file:
+            self.current_log_file = recent_log
+            
+            try:
+                with open(recent_log, "r", encoding="utf-8", errors="ignore") as f:
+                    initial_lines = f.readlines()
+                self.last_lines_counted = len(initial_lines)
+            except Exception:
+                self.last_lines_counted = 0
+                initial_lines = []
+                
+            self.current_character = "Unknown"
+            for line in initial_lines[:10]:
+                match_listener = re.search(r"Listener:\s+(.+)", line)
+                if match_listener:
+                    self.current_character = match_listener.group(1).strip()
+                    break
+            
+            print(f"{GRAY}[PILOT]{RESET} Active character detected: {MAGENTA}{self.current_character}{RESET}")
+            
+            self.current_system = "Unknown"
+            for line in reversed(initial_lines):
+                match_jump = re.search(r"Jumping from ([A-Za-z0-9\- ]+) to ([A-Za-z0-9\- ]+)", line)
+                if match_jump:
+                    self.current_system = match_jump.group(2).strip()
+                    self._print_system_banner("Detected in active session")
+                    return
+                
+                match_undock = re.search(r"Undocking from .+? to ([A-Za-z0-9\- ]+) solar system", line)
+                if match_undock:
+                    self.current_system = match_undock.group(1).strip()
+                    self._print_system_banner("Detected upon undocking")
+                    return
+            
+            if self.current_character != "Unknown":
+                historical_system = self.trace_historical_location(self.current_character)
+                
+                if historical_system:
+                    self.current_system = historical_system
+                    self._print_system_banner("Recovered from history")
+                    return
+            
+            print(f"\n{RED} ⚠️  [CURRENT SYSTEM] Location unknown. No previous history found for {self.current_character}.{RESET}")
+            print(f"{YELLOW} 👉 Please undock from station or perform a jump (Stargate) to start the monitor.{RESET}\n")
+            return
+
+        try:
+            with open(recent_log, "r", encoding="utf-8", errors="ignore") as f:
+                lines = f.readlines()
+
+            total_lines_now = len(lines)
+            
+            if total_lines_now > self.last_lines_counted:
+                new_lines = lines[self.last_lines_counted:]
+                self.last_lines_counted = total_lines_now
+
+                for line in new_lines:
+                    new_system = None
+
+                    match_jump = re.search(r"Jumping from ([A-Za-z0-9\- ]+) to ([A-Za-z0-9\- ]+)", line)
+                    if match_jump:
+                        new_system = match_jump.group(2).strip()
+                    else:
+                        match_undock = re.search(r"Undocking from .+? to ([A-Za-z0-9\- ]+) solar system", line)
+                        if match_undock:
+                            new_system = match_undock.group(1).strip()
+
+                    if new_system and new_system != self.current_system:
+                        self.current_system = new_system
+                        self._print_system_banner("System Changed")
+            
+            elif total_lines_now < self.last_lines_counted:
+                self.last_lines_counted = total_lines_now
+
+        except Exception:
+            pass
+
+    def _print_system_banner(self, trigger_type):
+        print(f"{CYAN}" + "=" * 65 + f"{RESET}")
+        print(f" >> [SYSTEM] {WHITE}{self.current_system:<22}{RESET} {GRAY}({trigger_type}){RESET}")
+        print(f"{CYAN}" + "=" * 65 + f"{RESET}\n")
+
+
+def get_clipboard_text():
     try:
-        root = Tk()
-        root.withdraw()
-        root.update()
-        texto = root.clipboard_get()
-        root.destroy()
-        return str(texto)
+        return pyperclip.paste()
     except Exception:
         return None
 
 
-def extraer_datos_firmas(texto):
-    """Mapea cada ID con su nombre/información extra si existe."""
-    datos_firmas = {}
-    if not texto:
-        return datos_firmas
+def get_site_icon(info_text, is_anomaly=False):
+    """Asigna icono y color de texto basándose en las palabras clave del scanner"""
+    info_lower = info_text.lower()
+    
+    if "wormhole" in info_lower or "agujero de gusano" in info_lower:
+        return "🕳️ ", MAGENTA
+    elif "relic" in info_lower or "reliquias" in info_lower:
+        return "🔑", YELLOW
+    elif "data" in info_lower or "datos" in info_lower:
+        return "💾", CYAN
+    elif "gas" in info_lower:
+        return "☁️ ", WHITE
+    elif "combat" in info_lower or "combate" in info_lower:
+        return "💀", RED
+    
+    if is_anomaly:
+        return "🔸", GREEN  # Si es otra anomalía genérica (ore, etc)
         
-    lineas = texto.replace("\r\n", "\n").split("\n")
-    for linea in lineas:
-        if "Cosmic Signature" in linea:
-            match = re.search(r"([A-Za-z]{3}-\d{3})", linea)
+    return "🌀", GRAY  # Firma cósmica sin escanear al 100%
+
+
+def extract_signature_data(text):
+    sig_data = {}
+    if not text:
+        return sig_data
+    clean_text = text.replace("<br>", "\n").replace("\r\n", "\n")
+    lines = clean_text.split("\n")
+    for line in lines:
+        if any(term in line for term in EVE_TERMS):
+            is_anomaly = "Anomaly" in line or "Anomaly" in line or "Anomalía" in line or "anomalía" in line
+            
+            match = re.search(r"([A-Za-z]{3}-\d{3})", line)
             if match:
-                id_firma = str(match.group(1)).upper()
+                sig_id = str(match.group(1)).upper()
+                processable_line = line.split(">", 1)[1].strip() if ">" in line else line
+                parts = [p.strip() for p in re.split(r"\t| {2,}", processable_line) if p.strip()]
                 
-                partes = [p.strip() for p in re.split(r"\t| {2,}", linea) if p.strip()]
-                info_extra = "Sin escanear"
+                percentage = 0.0
+                match_percentage = re.search(r"(\d+([.,]\d+)?)\s*%", processable_line)
+                if match_percentage:
+                    percentage = float(match_percentage.group(1).replace(",", "."))
+
+                extra_info = "Unscanned"
+                type_idx = -1
+                for i, part in enumerate(parts):
+                    if any(t in part for t in EVE_TERMS):
+                        type_idx = i
+                        break
+                if type_idx != -1:
+                    name_blocks = []
+                    for part in parts[type_idx + 1:]:
+                        if "%" not in part and not part.endswith("AU") and not part.endswith("km") and "Zona de" not in part and "Combat Zone" not in part:
+                            name_blocks.append(part)
+                    if name_blocks:
+                        extra_info = " - ".join(name_blocks)
                 
-                if "Cosmic Signature" in partes:
-                    idx = partes.index("Cosmic Signature")
-                    if idx + 1 < len(partes):
-                        siguiente = partes[idx + 1]
-                        if "%" not in siguiente and not siguiente.endswith("AU"):
-                            info_extra = siguiente
-                            
-                datos_firmas[id_firma] = info_extra
-    return datos_firmas
+                sig_data[sig_id] = {"percentage": percentage, "info": extra_info, "is_anomaly": is_anomaly}
+    return sig_data
 
 
-def procesar_cambios(texto_actual):
-    """Compara las firmas actuales e incluye sus nombres en el reporte con colores."""
-    firmas_actuales = extraer_datos_firmas(texto_actual)
+def save_merged_history(file_path, merged_sigs):
+    lines_to_save = []
+    for sig_id, data in merged_sigs.items():
+        pct_str = str(data["percentage"]).replace(".", ",") + " %"
+        type_str = "Cosmic Anomaly" if data.get("is_anomaly") else "Cosmic Signature"
+        if data["info"] != "Unscanned":
+            line = f"{sig_id}\t{type_str}\t{data['info']}\t{pct_str}\t1,0 AU"
+        else:
+            line = f"{sig_id}\t{type_str}\t{pct_str}\t1,0 AU"
+        lines_to_save.append(line)
+    with open(file_path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines_to_save))
 
-    if not firmas_actuales:
+
+def process_changes(current_text, monitor):
+    if monitor.current_system == "Unknown":
         return
 
-    firmas_anteriores = {}
-    if os.path.exists(ARCHIVO_TXT):
+    current_sigs = extract_signature_data(current_text)
+    if not current_sigs:
+        return
+
+    print("\033[2J\033[H")
+
+    txt_path = monitor.get_txt_file_path()
+    previous_sigs = {}
+    if os.path.exists(txt_path):
         try:
-            with open(ARCHIVO_TXT, "r", encoding="utf-8") as f:
-                firmas_anteriores = extraer_datos_firmas(f.read())
+            with open(txt_path, "r", encoding="utf-8") as f:
+                previous_sigs = extract_signature_data(f.read())
         except Exception:
             pass
 
-    # Si es el primer escaneo de la sesión
-    if not firmas_anteriores:
-        print(f"\n{VERDE}[OK]{RESET} Base de datos inicializada. Registradas {AMARILLO}{len(firmas_actuales)}{RESET} firmas.")
-        with open(ARCHIVO_TXT, "w", encoding="utf-8") as f:
-            f.write(texto_actual)
+    if not previous_sigs:
+        print(f"{GREEN}[OK]{RESET} Initialized system: {CYAN}{monitor.current_system}{RESET}. Registered {YELLOW}{len(current_sigs)}{RESET} sites.\n")
+        save_merged_history(txt_path, current_sigs)
         return
 
-    set_actuales = set(firmas_actuales.keys())
-    set_anteriores = set(firmas_anteriores.keys())
+    set_current = set(current_sigs.keys())
+    set_previous = set(previous_sigs.keys())
 
-    nuevas = set_actuales - set_anteriores
-    desaparecidas = set_anteriores - set_actuales
+    new_sigs = set_current - set_previous
+    desp_sigs = set_previous - set_current
+    common_sigs = set_current & set_previous
 
-    # Revisamos si una firma vieja ahora tiene nombre
-    actualizadas = {}
-    for id_comun in set_actuales & set_anteriores:
-        if firmas_actuales[id_comun] != firmas_anteriores[id_comun] and firmas_actuales[id_comun] != "Sin escanear":
-            actualizadas[id_comun] = firmas_actuales[id_comun]
+    final_merged_sigs = {}
+    updated_report = {}
 
-    # Imprimimos si hay novedades
-    if nuevas or desaparecidas or actualizadas:
-        hora_actual = time.strftime("%H:%M:%S")
+    for sig_id in new_sigs:
+        final_merged_sigs[sig_id] = current_sigs[sig_id]
 
-        print("\n" + AMARILLO + "=" * 50 + RESET)
-        print(f"   ACTUALIZACIÓN [{hora_actual}] ({AMARILLO}{len(firmas_actuales)}{RESET} en espacio)")
-        print(AMARILLO + "=" * 50 + RESET)
-
-        if nuevas:
-            print(f"{VERDE}NUEVAS ({len(nuevas)}):{RESET}")
-            for id_firma in sorted(nuevas):
-                info = firmas_actuales[id_firma]
-                info_color = GRIS + info + RESET if info == "Sin escanear" else CIAN + info + RESET
-                print(f"  {VERDE}[+]{RESET} {id_firma} -> {info_color}")
+    for sig_id in common_sigs:
+        actual = current_sigs[sig_id]
+        anterior = previous_sigs[sig_id]
+        if actual["percentage"] >= anterior["percentage"]:
+            final_merged_sigs[sig_id] = actual
+            if actual["percentage"] > anterior["percentage"] and actual["info"] != anterior["info"]:
+                updated_report[sig_id] = actual
         else:
-            print(f"{GRIS}No hay firmas nuevas.{RESET}")
+            final_merged_sigs[sig_id] = anterior
 
-        if actualizadas:
-            print(f"\n{CIAN}ESCANEADAS/CAMBIADAS ({len(actualizadas)}):{RESET}")
-            for id_firma in sorted(actualizadas):
-                print(f"  {CIAN}[*]{RESET} {id_firma} -> {AMARILLO}{actualizadas[id_firma]}{RESET}")
+    if new_sigs or desp_sigs or updated_report:
+        current_time = time.strftime("%H:%M:%S")
+        print(YELLOW + "-" * 65 + RESET)
+        print(f" 🛰️  SYSTEM: {CYAN}{monitor.current_system:<10}{RESET} [{current_time}] ({YELLOW}{len(current_sigs)}{RESET} in space)")
+        print(YELLOW + "-" * 65 + RESET)
 
-        if desaparecidas:
-            print(f"\n{ROJO}DESAPARECIDAS ({len(desaparecidas)}):{RESET}")
-            for id_firma in sorted(desaparecidas):
-                print(f"  {ROJO}[-]{RESET} {id_firma} {GRIS}({firmas_anteriores[id_firma]}){RESET}")
-        else:
-            print(f"\n{GRIS}Ninguna firma ha desaparecido.{RESET}")
+        # --- SECCIÓN DE NUEVOS SITIOS ---
+        if new_sigs:
+            # Separar anomalías de firmas
+            new_anoms = [s for s in new_sigs if current_sigs[s]["is_anomaly"]]
+            new_signatures = [s for s in new_sigs if not current_sigs[s]["is_anomaly"]]
 
-        print(AMARILLO + "=" * 50 + RESET)
+            if new_signatures:
+                print(f" {GREEN}[S] NEW COSMIC SIGNATURES ({len(new_signatures)}):{RESET}")
+                for sig_id in sorted(new_signatures):
+                    info = current_sigs[sig_id]["info"]
+                    pct = f"{current_sigs[sig_id]['percentage']}%"
+                    icon, text_color = get_site_icon(info, is_anomaly=False)
+                    print(f"   {GREEN}[+]{RESET} {icon} {GREEN}{sig_id}{RESET}  ->  {pct:<6}  {text_color}{info}{RESET}")
 
-        # Guardamos el estado actual para la siguiente vuelta
-        with open(ARCHIVO_TXT, "w", encoding="utf-8") as f:
-            f.write(texto_actual)
-    else:
-        print(f"\n {AMARILLO} [=] {RESET} No hay Cambios" + RESET)
+            if new_anoms:
+                if new_signatures: print()  # Añadir salto si hay ambos tipos
+                print(f" {GRAY}[A] NEW COSMIC ANOMALIES ({len(new_anoms)}):{RESET}")
+                for sig_id in sorted(new_anoms):
+                    info = current_sigs[sig_id]["info"]
+                    pct = f"{current_sigs[sig_id]['percentage']}%"
+                    icon, text_color = get_site_icon(info, is_anomaly=True)
+                    # Forzar color verde suave para el texto de anomalías para que no sature la vista
+                    print(f"   {GREEN}[+]{RESET} {icon} {GRAY}{sig_id}{RESET}  ->  {pct:<6}  {GREEN}{info}{RESET}")
+
+        # --- SECCIÓN DE PROGRESO DE ESCANEO ---
+        if updated_report:
+            prog_anoms = [s for s in updated_report if updated_report[s]["is_anomaly"]]
+            prog_signatures = [s for s in updated_report if not updated_report[s]["is_anomaly"]]
+
+            if prog_signatures:
+                print(f"\n {CYAN}[S] SCAN PROGRESS ({len(prog_signatures)}):{RESET}")
+                for sig_id in sorted(prog_signatures):
+                    info = updated_report[sig_id]["info"]
+                    pct = f"{updated_report[sig_id]['percentage']}%"
+                    icon, text_color = get_site_icon(info, is_anomaly=False)
+                    print(f"   {CYAN}[*]{RESET} {icon} {CYAN}{sig_id}{RESET}  ->  {pct:<6}  {text_color}{info}{RESET}")
+
+            if prog_anoms:
+                print(f"\n {CYAN}[A] ANOMALY UPDATE ({len(prog_anoms)}):{RESET}")
+                for sig_id in sorted(prog_anoms):
+                    info = updated_report[sig_id]["info"]
+                    pct = f"{updated_report[sig_id]['percentage']}%"
+                    icon, text_color = get_site_icon(info, is_anomaly=True)
+                    print(f"   {CYAN}[*]{RESET} {icon} {GRAY}{sig_id}{RESET}  ->  {pct:<6}  {GREEN}{info}{RESET}")
+
+        # --- SECCIÓN DE SITIOS DESAPARECIDOS ---
+        if desp_sigs:
+            desp_anoms = [s for s in desp_sigs if previous_sigs[s]["is_anomaly"]]
+            desp_signatures = [s for s in desp_sigs if not previous_sigs[s]["is_anomaly"]]
+
+            if desp_signatures:
+                print(f"\n {RED}[S] DESPAWNED SIGNATURES ({len(desp_signatures)}):{RESET}")
+                for sig_id in sorted(desp_signatures):
+                    info = previous_sigs[sig_id]["info"]
+                    icon, _ = get_site_icon(info, is_anomaly=False)
+                    print(f"   {RED}[-]{RESET} {icon} {WHITE}{sig_id}{RESET}              {GRAY}({info}){RESET}")
+
+            if desp_anoms:
+                print(f"\n {RED}[A] DESPAWNED ANOMALIES ({len(desp_anoms)}):{RESET}")
+                for sig_id in sorted(desp_anoms):
+                    info = previous_sigs[sig_id]["info"]
+                    icon, _ = get_site_icon(info, is_anomaly=True)
+                    print(f"   {RED}[-]{RESET} {icon} {GRAY}{sig_id}{RESET}              {GRAY}({info}){RESET}")
+
+        #print(YELLOW + "-" * 65 + RESET + "\n")                
+        save_merged_history(txt_path, final_merged_sigs)
+
 
 def main():
-    # Forzar a la consola de Windows a aceptar códigos de color ANSI
-    os.system("")
+    os.makedirs(HISTORY_FOLDER, exist_ok=True)
+    os.system("")  # Enable ANSI colors on Windows
+    
+    # Header & Branding - Diseño ASCII Ultra-Compatible
+    print(YELLOW + "#" * 65 + RESET)
+    print(YELLOW + "#      📡     === Crapy Cosmic Probe Monitor ===     📡       #" + RESET)
+    print(YELLOW + "#" * 65 + RESET)
+    
+    # In-Game Tip Message
+    print()
+    print(CYAN + "  If you find this program useful, feel free to send an in-game" + RESET)
+    print(CYAN + "  tip to \"Perkutor Jakuard\". It will be greatly appreciated!" + RESET)
+    print()    
 
-    print(AMARILLO + "=== MONITOR DE FIRMAS EVE ONLINE ===" + RESET)
-    print(VERDE + "\nSi lo encuentras util, puedes enviar un poco de isk a 'Perkutor Jakuard'. Gracias !!" + RESET)
-    print("");
-    print("Para usarlo ve copiando el contenido de la ventana de escaneo de sondas / Probe Scanner")
-    print("Te dirá cuando las cosmic signatures han cambiado.")
-    print("De momento No soporta multiples sistemas.\n")
-    print(f"{GRIS}Escuchando portapapeles de Windows...{RESET}")
-    print("Copia el Probe Scanner (Ctrl+A y Ctrl+C) en el juego para actualizar.\n")
+    # How to Use Instructions
+    print(GREEN + "  How to use it:" + RESET)
+    print(WHITE + "  This program helps you track changes in the Probe Scanner window." + RESET)
+    print(WHITE + "  Open the Scanner, select all (Ctrl+A), and copy (Ctrl+C)." + RESET)
+    print(WHITE + "  The monitor will instantly print the differences." + RESET)
+    
+    print()
+    print(YELLOW + "-" * 65 + RESET)
+    print(f"  {GRAY}Reverse tracking active. Watching logs...{RESET}\n")
 
-    ultimo_texto_procesado = ""
+    monitor = EVEMonitor()
 
     try:
         while True:
-            texto_actual = obtener_texto_portapapeles()
+            monitor.track_system_change()
 
+            current_text = get_clipboard_text()
             if (
-                texto_actual
-                and texto_actual.strip()
-                and texto_actual != ultimo_texto_procesado
+                current_text
+                and current_text.strip()
+                and current_text != monitor.last_clipboard_text
             ):
-                if "Cosmic Signature" in texto_actual:
-                    procesar_cambios(texto_actual)
-                    ultimo_texto_procesado = texto_actual
+                if any(t in current_text for t in EVE_TERMS):
+                    process_changes(current_text, monitor)
+                    monitor.last_clipboard_text = current_text
 
-            time.sleep(INTERVALO_REVISION)
+            time.sleep(CHECK_INTERVAL)
 
     except KeyboardInterrupt:
-        print(f"\n{CIAN}[INFO]{RESET} Monitor detenido por el usuario.")
+        print(f"\n{CYAN}[INFO]{RESET} Monitor stopped cleanly.")
     except Exception as e:
-        print(f"\n{ROJO}❌ ¡EL MONITOR HA SUFRIDO UN ERROR!{RESET}")
+        print(f"\n{RED}❌ CRITICAL ERROR IN THE MONITOR!{RESET}")
         print("-" * 50)
         traceback.print_exc()
         print("-" * 50)
-        input("\nPresiona ENTER para salir...")
+        input("\nPress ENTER to exit...")
 
 
 if __name__ == "__main__":
     main()
-    
