@@ -1,11 +1,8 @@
 This is an third party utility for the game Eve Online.
 
-It allows to quickly check which cosmics signatures are new or gone of the system.
+It allows to quickly check which new cosmics signatures appears in the system.
 
-Specially Usefull for Wormhole and explorer pilots.
-
-Game language english.
-Spanish partially supported.
+Specially Usefull for wormhole and explorer.
 
 == How to use it ==
 
