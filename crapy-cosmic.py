@@ -269,7 +269,10 @@ def save_merged_history(file_path, merged_sigs):
         f.write("\n".join(lines_to_save))
 
 
+numChanges = 0
+
 def process_changes(current_text, monitor):
+    global numChanges
     if monitor.current_system == "Unknown":
         return
 
@@ -277,7 +280,8 @@ def process_changes(current_text, monitor):
     if not current_sigs:
         return
 
-    print("\033[2J\033[H")
+    if numChanges != 0:
+        print("\033[2J\033[H")
 
     txt_path = monitor.get_txt_file_path()
     previous_sigs = {}
@@ -388,6 +392,7 @@ def process_changes(current_text, monitor):
 
         #print(YELLOW + "-" * 65 + RESET + "\n")                
         save_merged_history(txt_path, final_merged_sigs)
+        numChanges += 1
 
 
 def main():
