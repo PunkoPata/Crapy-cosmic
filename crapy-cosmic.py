@@ -122,7 +122,8 @@ class EVEMonitor:
                 if match_listener:
                     self.current_character = match_listener.group(1).strip()
                     break
-            
+
+            print()
             print(f"{GRAY}[PILOT]{RESET} Active character detected: {MAGENTA}{self.current_character}{RESET}")
             
             self.current_system = "Unknown"
@@ -183,9 +184,7 @@ class EVEMonitor:
             pass
 
     def _print_system_banner(self, trigger_type):
-        print(f"{CYAN}" + "=" * 65 + f"{RESET}")
-        print(f" >> [SYSTEM] {WHITE}{self.current_system:<22}{RESET} {GRAY}({trigger_type}){RESET}")
-        print(f"{CYAN}" + "=" * 65 + f"{RESET}\n")
+        print(f"{GRAY}[SYSTEM] {WHITE}{self.current_system:<22}{RESET} {GRAY}({trigger_type}){RESET}")
 
 
 def get_clipboard_text():
@@ -400,9 +399,9 @@ def main():
     os.system("")  # Enable ANSI colors on Windows
     
     # Header & Branding - Diseño ASCII Ultra-Compatible
-    print(YELLOW + "#" * 65 + RESET)
-    print(YELLOW + "#      📡     === Crapy Cosmic Probe Monitor ===     📡       #" + RESET)
-    print(YELLOW + "#" * 65 + RESET)
+    print(YELLOW + "═" * 65 + RESET)
+    print(YELLOW + "      📡     === Crapy Cosmic Probe Monitor ===     📡       " + RESET)
+    print(YELLOW + "═" * 65 + RESET)
     
     # In-Game Tip Message
     print()
@@ -414,11 +413,11 @@ def main():
     print(GREEN + "  How to use it:" + RESET)
     print(WHITE + "  This program helps you track changes in the Probe Scanner window." + RESET)
     print(WHITE + "  Open the Scanner, select all (Ctrl+A), and copy (Ctrl+C)." + RESET)
-    print(WHITE + "  The monitor will instantly print the differences." + RESET)
-    
+    print(WHITE + "  The monitor will instantly print the differences with the previous data." + RESET)
+
     print()
-    print(YELLOW + "-" * 65 + RESET)
-    print(f"  {GRAY}Reverse tracking active. Watching logs...{RESET}\n")
+    print(YELLOW + "═" * 65 + RESET)
+    #print(f"  {GRAY}Reverse tracking active. Watching logs...{RESET}\n")
 
     monitor = EVEMonitor()
 
