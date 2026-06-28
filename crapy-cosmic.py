@@ -23,6 +23,7 @@ YELLOW = "\033[93m"
 GRAY = "\033[90m"
 WHITE = "\033[97m"
 MAGENTA = "\033[95m"
+BOLD = "\033[1m"
 
 EVE_TERMS = ["Cosmic Signature", "Firma cósmica", "Cosmic Anomaly", "Anomalía cósmica"]
 
@@ -124,7 +125,7 @@ class EVEMonitor:
                     break
 
             print()
-            print(f"{GRAY}[PILOT]{RESET} Active character detected: {MAGENTA}{self.current_character}{RESET}")
+            print(f"{GRAY}[PILOT]{RESET}Active character detected: {MAGENTA}{self.current_character}{RESET}")
             
             self.current_system = "Unknown"
             for line in reversed(initial_lines):
@@ -321,9 +322,9 @@ def process_changes(current_text, monitor):
 
     if new_sigs or desp_sigs or updated_report:
         current_time = time.strftime("%H:%M:%S")
-        print(YELLOW + "-" * 65 + RESET)
+        print(YELLOW + "═" * 65 + RESET)
         print(f" 🛰️  SYSTEM: {CYAN}{monitor.current_system:<10}{RESET} [{current_time}] ({YELLOW}{len(current_sigs)}{RESET} in space)")
-        print(YELLOW + "-" * 65 + RESET)
+        print(YELLOW + "═" * 65 + RESET)
 
         # --- SECCIÓN DE NUEVOS SITIOS ---
         if new_sigs:
@@ -397,23 +398,23 @@ def process_changes(current_text, monitor):
 def main():
     os.makedirs(HISTORY_FOLDER, exist_ok=True)
     os.system("")  # Enable ANSI colors on Windows
-    
-    # Header & Branding - Diseño ASCII Ultra-Compatible
+
     print(YELLOW + "═" * 65 + RESET)
     print(YELLOW + "      📡     === Crapy Cosmic Probe Monitor ===     📡       " + RESET)
     print(YELLOW + "═" * 65 + RESET)
-    
-    # In-Game Tip Message
     print()
-    print(CYAN + "  If you find this program useful, feel free to send an in-game" + RESET)
-    print(CYAN + "  tip to \"Perkutor Jakuard\". It will be greatly appreciated!" + RESET)
-    print()    
 
-    # How to Use Instructions
-    print(GREEN + "  How to use it:" + RESET)
     print(WHITE + "  This program helps you track changes in the Probe Scanner window." + RESET)
+    print()
+    print(GREEN + "  How to use it:" + RESET)
     print(WHITE + "  Open the Scanner, select all (Ctrl+A), and copy (Ctrl+C)." + RESET)
     print(WHITE + "  The monitor will instantly print the differences with the previous data." + RESET)
+
+    print()
+    print(WHITE + "  If you find this program useful, feel free to send an in-game" + RESET)
+    print(WHITE + f"  tip to {BOLD}{CYAN}\"Perkutor Jakuard\"{CYAN}{RESET}{WHITE}. It will be greatly appreciated!" + RESET)
+    print()
+
 
     print()
     print(YELLOW + "═" * 65 + RESET)
