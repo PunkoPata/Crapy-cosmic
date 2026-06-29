@@ -21,3 +21,6 @@ The detection of the current system is based in the logs.
 That works except for WH where a system changed is not logged.
 For wormholes you can copy the system name, click right, click in "copy" in the menu.
 
+== Accounts ==
+
+Data is shared between all the accounts and characters in the same computer.
