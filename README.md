@@ -14,3 +14,10 @@ In the game select all the content of the Probe Scan Window and Copy them ( Ctr-
 The program will monitorize your clipboard for new content.
 And if it finds differences it will show wich Cosmic Signatures has changed.
 
+== Stellar System ==
+
+The program will keep separated data for every system.
+The detection of the current system is based in the logs.
+That works except for WH where a system changed is not logged.
+For wormholes you can copy the system name, click right, click in "copy" in the menu.
+
