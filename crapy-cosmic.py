@@ -125,7 +125,7 @@ class EVEMonitor:
                     break
 
             print()
-            print(f"{GRAY}[PILOT]{RESET}Active character detected: {MAGENTA}{self.current_character}{RESET}")
+            print(f"{GRAY}[PILOT]{RESET} Active character detected: {MAGENTA}{self.current_character}{RESET}")
             
             self.current_system = "Unknown"
             for line in reversed(initial_lines):
@@ -395,6 +395,16 @@ def process_changes(current_text, monitor):
         numChanges += 1
 
 
+def get_current_solar_system(html_text):
+    pattern = r'<a[^>]*alt=["\']Current Solar System["\'][^>]*>(.*?)</a>'
+    match = re.search(pattern, html_text, re.IGNORECASE | re.DOTALL)
+
+    if match:
+        return match.group(1).strip()
+
+    return None
+
+
 def main():
     os.makedirs(HISTORY_FOLDER, exist_ok=True)
     os.system("")  # Enable ANSI colors on Windows
@@ -427,6 +437,18 @@ def main():
             monitor.track_system_change()
 
             current_text = get_clipboard_text()
+
+            # For WH where the logs don't appears.
+            if current_text:
+                system=get_current_solar_system(current_text)
+                if system and system != monitor.current_system:
+                    monitor.current_system = system
+                    print(YELLOW + "═" * 65 + RESET)
+                    print(
+                        f" 🛰️  SYSTEM: {CYAN}{monitor.current_system:<10}{RESET} from clipboard")
+                    print(YELLOW + "═" * 65 + RESET)
+
+
             if (
                 current_text
                 and current_text.strip()
