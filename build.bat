@@ -4,7 +4,7 @@ title CRAPY-COSMIC Builder (OUTSIDE DIR)
 REM ===============================
 REM CONFIG
 REM ===============================
-set VERSION=1.0.0
+set VERSION=1.0.2
 set OUTDIR=..\crapy-cosmic-build
 
 echo ===============================
@@ -63,6 +63,7 @@ echo.
 echo COPIANDO RESULTADOS...
 
 copy dist\crapy-cosmic.exe "%OUTDIR%\release\"
+copy "%OUTDIR%\release\" "%OUTDIR%\release\.."
 
 (
 echo CRAPY-COSMIC
